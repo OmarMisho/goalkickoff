@@ -1,0 +1,17 @@
+{
+  "name": "kickoff-tactics-signaling",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "peer": "^1.0.2"
+  }
+}

@@ -1,0 +1,192 @@
+@import "tailwindcss";
+
+:root {
+  --t0: #19d3ff;
+  --t1: #ff3860;
+  --gold: #ffd23f;
+  --ink: #04121c;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  height: 100dvh;
+}
+
+body {
+  margin: 0;
+  background: #04121c;
+  color: #e8f4ef;
+  font-family: "Chakra Petch", sans-serif;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+
+input,
+button {
+  font-family: inherit;
+}
+
+/* thin themed scrollbar for the rules page */
+.howto-scroll::-webkit-scrollbar { width: 8px; }
+.howto-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); }
+.howto-scroll::-webkit-scrollbar-thumb { background: #12384c; border-radius: 0; }
+.howto-scroll::-webkit-scrollbar-thumb:hover { background: #1d4d66; }
+
+.font-disp {
+  font-family: "Archivo Black", sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.stage-bg {
+  background:
+    radial-gradient(1200px 700px at 50% 42%, rgba(16, 64, 52, 0.55), rgba(4, 18, 28, 0) 70%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.016) 0 2px, transparent 2px 4px),
+    #04121c;
+}
+
+/* ---------- panels & blades ---------- */
+.panel {
+  background: rgba(6, 22, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.chamfer {
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+}
+.chamfer-sm {
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+
+.btn-blade {
+  border: none;
+  cursor: pointer;
+  clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+  transition: transform 0.12s ease, filter 0.12s ease;
+  letter-spacing: 0.12em;
+}
+.btn-blade:hover {
+  transform: translateY(-2px) scale(1.03);
+  filter: brightness(1.12);
+}
+.btn-blade:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.hazard {
+  background: repeating-linear-gradient(-45deg, var(--gold) 0 12px, #143241 12px 24px);
+}
+
+.skew-tag {
+  transform: skewX(-12deg);
+}
+
+/* ---------- motion ---------- */
+@keyframes bannerIn {
+  0% { opacity: 0; transform: translateY(26px) scale(0.9); }
+  60% { opacity: 1; transform: translateY(-4px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.banner-in {
+  animation: bannerIn 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise-in {
+  animation: riseIn 0.5s ease both;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 210, 63, 0.55); }
+  50% { box-shadow: 0 0 34px 6px rgba(255, 210, 63, 0.35); }
+}
+.pulse-glow {
+  animation: pulseGlow 1.4s ease-in-out infinite;
+}
+
+@keyframes floatBall {
+  0%, 100% { transform: translateY(0) rotate(-6deg); }
+  50% { transform: translateY(-12px) rotate(6deg); }
+}
+.float-ball {
+  animation: floatBall 2.6s ease-in-out infinite;
+}
+
+@keyframes flightFlash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.flight-flash {
+  animation: flightFlash 0.5s steps(2, end) infinite;
+}
+
+/* ---------- how-to page ---------- */
+.howto-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #1d5f7a rgba(255, 255, 255, 0.06);
+}
+.howto-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.howto-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+.howto-scroll::-webkit-scrollbar-thumb {
+  background: #1d5f7a;
+  border: 2px solid #04121c;
+}
+
+.shot-frame {
+  background: #06161f;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+canvas.game-canvas {
+  display: block;
+  touch-action: none;
+}
+
+/* ---------- finger-friendly on phones ---------- */
+@media (pointer: coarse), (max-width: 900px) {
+  .btn-blade {
+    min-height: 54px;
+    padding-top: 0.9rem;
+    padding-bottom: 0.9rem;
+  }
+  button {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* scrollable overlays on short (landscape phone) screens */
+.overlay-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #1d5f7a rgba(255, 255, 255, 0.06);
+}
+.overlay-scroll > * {
+  margin: auto;
+}
+
+@keyframes rotate-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-14deg); }
+  60% { transform: rotate(80deg); }
+  80% { transform: rotate(76deg); }
+}
+.rotate-wiggle {
+  animation: rotate-wiggle 1.6s ease-in-out infinite;
+}
