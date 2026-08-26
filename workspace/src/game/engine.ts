@@ -46,7 +46,7 @@ export interface UiSnapshot {
 interface Coin {
   team: Team; idx: number; role: Role;
   x: number; y: number; vx: number; vy: number;
-  ax: number; ay: number; orbit: number; zone: number; // anchor + outer circle + inner keep-out
+  ax: number; ay: number; orbit: number; zone: number;
   flash: number;
 }
 
@@ -67,7 +67,7 @@ interface Key { t: number; x: number; y: number; }
 
 const freshStats = (): TeamStats => ({ passes: 0, completed: 0, interceptions: 0, blocks: 0, turnovers: 0 });
 
-const SUBSTEPS = 288; // physics granularity of the baked resolve
+const SUBSTEPS = 288;
 
 export class Engine {
   private cv: HTMLCanvasElement;
@@ -98,7 +98,6 @@ export class Engine {
   private bannerId = 0;
   private howtoFrom: Mode = "title";
 
-  /* ---------------- netplay state ---------------- */
   private net = {
     active: false,
     isHost: false,
@@ -138,7 +137,6 @@ export class Engine {
     this.cv = cv;
     this.ctx = cv.getContext("2d")!;
     this.onUi = onUi;
-    // persisted defaults (flag, formation, sound) — editable in the Settings page
     const s = loadSettings();
     this.flags = [...s.flags] as [string, string];
     this.forms = [...s.forms] as [string, string];
@@ -198,7 +196,6 @@ export class Engine {
     sfx.click();
     if (this.net.active) {
       if (this.net.isHost) {
-        // host confirmed: proceed now if the guest's form is already in
         this.net.hostFormLocked = true;
         if (this.net.guestFormIn) this.modeUntil = Math.min(this.modeUntil, this.time + 0.01);
       } else if (!this.net.formSent) {
@@ -211,7 +208,7 @@ export class Engine {
     }
     if (this.planner === 0) {
       this.planner = 1;
-      this.modeUntil = this.time + FORM_TIME; // give P2 the full window
+      this.modeUntil = this.time + FORM_TIME;
       this.bannerId++;
       this.setupIdleField(1);
     } else this.beginRound();
@@ -291,7 +288,6 @@ export class Engine {
     sfx.click();
     this.emit(true);
   }
-  /** save defaults + apply them live (flags/formations preselect, sound applied instantly) */
   uiApplySettings(s: Settings) {
     saveSettings(s);
     this.flags = [...s.flags] as [string, string];
@@ -322,7 +318,6 @@ export class Engine {
     this.plans = [emptyPlan(), emptyPlan()];
     this.setupIdleField(isHost ? 0 : 1);
     if (isHost) {
-      // straight into the strategy phase — no handoffs online
       this.planner = 0;
       this.mode = "formPick";
       this.modeUntil = this.time + FORM_TIME;
@@ -344,7 +339,6 @@ export class Engine {
     return this.net.active;
   }
 
-  /** keep the guest's team plan structurally sane */
   private sanitizePlan(raw: any): TeamPlan {
     const p = emptyPlan();
     if (!raw) return p;
@@ -427,17 +421,24 @@ export class Engine {
     }
   }
 
-  /** guest side: host says what phase comes next */
   private onPhaseMsg(m: any) {
     this.net.awaiting = false;
     this.net.planSent = false;
     this.net.formSent = false;
     this.net.oppLocked = false;
     this.plans[this.net.myTeam] = emptyPlan();
+
     if (m.scores) this.scores = [...m.scores] as [number, number];
-    // keep the host's formation in sync so opponent coins render in the right slots
-    // (the guest always keeps its own locally-chosen formation for team 1)
-    if (Array.isArray(m.forms) && m.forms.length === 2) this.forms = [m.forms[0], this.forms[1]];
+
+    // CRITICAL FIX: Preserve guest's own formation, only sync host's formation from host
+    if (Array.isArray(m.forms) && m.forms.length === 2) {
+      // Guest keeps their own locally chosen formation for team 1
+      // Only update team 0 (host's formation) from the host message
+      this.forms[0] = m.forms[0];
+      // Team 1 (guest) keeps its own local form - do NOT overwrite!
+      // this.forms[1] stays unchanged
+    }
+
     switch (m.kind) {
       case "form": {
         if (m.fresh) {
@@ -470,7 +471,6 @@ export class Engine {
       case "plan": {
         this.tick = typeof m.tick === "number" ? m.tick : this.tick;
         if (m.reset) {
-          // post-goal kickoff: rebuild the exact same layout the host built
           this.placeFormations();
           const ht = (typeof m.holderTeam === "number" ? m.holderTeam : 0) as Team;
           const holder = this.centerCoin(ht);
@@ -485,7 +485,7 @@ export class Engine {
       }
       case "roundEnd": {
         this.mode = "roundEnd";
-        this.modeUntil = this.time + 9999; // host drives the next phase
+        this.modeUntil = this.time + 9999;
         this.bannerId++;
         sfx.whistle();
         break;
@@ -495,7 +495,6 @@ export class Engine {
     this.emit(true);
   }
 
-  /** guest: replay the host's baked resolve reel */
   private applyResolve(p: any) {
     const R = this.resolve;
     R.t = 0; R.evIdx = 0;
@@ -507,6 +506,26 @@ export class Engine {
     if (p.scores) this.scores = [...p.scores] as [number, number];
     if (p.stats) this.stats = [{ ...p.stats[0] }, { ...p.stats[1] }];
     if (typeof p.tick === "number") this.tick = p.tick;
+
+    // CRITICAL FIX: Don't overwrite guest's local coins - the host sends the exact positions
+    // We need to apply the host's coin positions to our local coins so both devices match
+    if (Array.isArray(R.coinKeys) && R.coinKeys.length === 10) {
+      for (let gi = 0; gi < 10; gi++) {
+        const arr = R.coinKeys[gi];
+        if (arr && arr.length > 0) {
+          const last = arr[arr.length - 1];
+          if (this.coins[gi]) {
+            this.coins[gi].x = last.x;
+            this.coins[gi].y = last.y;
+            this.coins[gi].ax = last.x;
+            this.coins[gi].ay = last.y;
+            this.coins[gi].vx = 0;
+            this.coins[gi].vy = 0;
+          }
+        }
+      }
+    }
+
     this.mode = "resolve";
     this.net.awaiting = false;
     this.net.oppLocked = false;
@@ -514,10 +533,7 @@ export class Engine {
     this.emit(true);
   }
 
-  /* host-side online orchestration */
-
   private maybeBeginRoundOnline() {
-    // host waits for the guest's formation (with a grace window past the deadline)
     if (this.mode !== "formPick" || this.planner !== 0) return;
     if (!this.net.guestFormIn && this.time < this.modeUntil + 0.6) return;
     this.net.guestFormIn = false;
@@ -526,7 +542,6 @@ export class Engine {
   }
 
   private onlineNextPhase() {
-    // host: advance the match and tell the guest where we are
     if (this.tick >= TICKS_PER_ROUND) {
       this.mode = "roundEnd";
       this.modeUntil = this.time + 2.5;
@@ -534,8 +549,8 @@ export class Engine {
       sfx.whistle();
       this.net.send({ t: "phase", kind: "roundEnd", scores: this.scores });
     } else {
-      this.planner = 0; // online: Player 1 (host) always plans first
-      this.plans[1] = emptyPlan(); // drop last segment's guest plan — never reuse stale orders
+      this.planner = 0;
+      this.plans[1] = emptyPlan();
       this.net.guestPlanIn = false;
       this.startPlan();
       this.net.send({ t: "phase", kind: "plan", tick: this.tick, deadline: Date.now() + PLAN_TIME * 1000, scores: this.scores, forms: this.forms });
@@ -595,7 +610,7 @@ export class Engine {
     this.tick = 0;
     this.plans = [emptyPlan(), emptyPlan()];
     this.placeFormations();
-    const holderTeam: Team = ((this.round - 1) % 2) as Team; // round 1 -> player 1
+    const holderTeam: Team = ((this.round - 1) % 2) as Team;
     const holder = this.centerCoin(holderTeam);
     this.ball.mode = "held";
     this.ball.holderId = holder;
@@ -607,11 +622,10 @@ export class Engine {
     this.emit(true);
   }
 
-  /** decide the next phase after a segment / intro / goal completes */
   private nextSegment() {
     if (this.net.active) {
       if (this.net.isHost) this.onlineNextPhase();
-      return; // guest: the host drives every phase transition
+      return;
     }
     if (this.tick >= TICKS_PER_ROUND) {
       this.mode = "roundEnd";
@@ -619,7 +633,6 @@ export class Engine {
       this.bannerId++;
       sfx.whistle();
     } else {
-      // every segment: player 1 plots first, then player 2, then both execute
       this.planner = 0;
       this.handoffNext = "plan";
       this.mode = "handoff";
@@ -630,8 +643,6 @@ export class Engine {
 
   private startPlan() {
     this.mode = "plan";
-    // only the current planner starts with a clean sheet — the other
-    // player's locked-in plan must survive until the simultaneous resolve
     this.plans[this.planner] = emptyPlan();
     this.modeUntil = this.time + PLAN_TIME;
     this.lastPlanSec = 99;
@@ -649,11 +660,8 @@ export class Engine {
     sfx.click();
     if (this.net.active) {
       if (this.net.isHost) {
-        // host locks in — the shared 10s window keeps running for player 2;
-        // the resolve fires the moment BOTH are locked (update loop)
         this.net.hostLocked = true;
       } else if (!this.net.planSent) {
-        // guest ships their secret orders to the host
         this.net.send({
           t: "plan",
           p: this.plans[this.net.myTeam],
@@ -661,7 +669,7 @@ export class Engine {
         });
         this.net.planSent = true;
         this.net.awaiting = true;
-        this.modeUntil = this.time + 9999; // countdown done — waiting for the clash
+        this.modeUntil = this.time + 9999;
       }
       this.emit(true);
       return;
@@ -689,7 +697,6 @@ export class Engine {
 
     const dt = PHYS_DUR / SUBSTEPS;
     const pos: Vec[] = this.coins.map((c) => ({ x: c.x, y: c.y }));
-    // RULE: the coin with the ball cannot move this segment — it must pass.
     const frozenGi = this.ball.mode === "held" && this.ball.holderId != null ? this.ball.holderId : -1;
     const vel: Vec[] = this.coins.map((c, gi) => {
       if (gi === frozenGi) return { x: 0, y: 0 };
@@ -697,10 +704,9 @@ export class Engine {
       if (!plan) return { x: 0, y: 0 };
       const d = dist(c, plan);
       if (d < 4) return { x: 0, y: 0 };
-      const sp = Math.min(470, Math.max(50, d / MOVE_DUR)); // farther stretch = more power
+      const sp = Math.min(470, Math.max(50, d / MOVE_DUR));
       return { x: ((plan.x - c.x) / d) * sp, y: ((plan.y - c.y) / d) * sp };
     });
-    // projected resting targets (planned ones get spacing-enforced later by the relaxation pass)
     const rest: Vec[] = this.coins.map((c, gi) =>
       this.plans[c.team].moves[c.idx] ?? { x: c.x, y: c.y },
     );
@@ -708,13 +714,11 @@ export class Engine {
     const pushCd = new Array<number>(10).fill(-9);
     const ownGoalX = (team: Team) => (team === 0 ? PITCH.l : PITCH.r);
 
-    // ball state
     let bMode: "held" | "flight" | "loose" = this.ball.mode === "held" ? "held" : "loose";
     let bHolder = this.ball.holderId;
     let bx = this.ball.x, by = this.ball.y, bvx = 0, bvy = 0;
     let goal: Team | null = null;
 
-    // pass plan (or forced turnover)
     let pass: PassPlan | null = null;
     let passerTeam: Team = 0;
     let kickAt = -1;
@@ -726,10 +730,9 @@ export class Engine {
       const planned = this.plans[holder.team].pass;
       if (planned) {
         pass = { ...planned };
-        kickAt = 0.02; // the pass fires the instant the segment resolves
+        kickAt = 0.02;
         this.stats[passerTeam].passes++;
       } else {
-        // RULE: the carrier MUST pass this segment or loses the ball
         kickAt = 0.06;
         this.stats[passerTeam].turnovers++;
         R.events.push({ t: 0.05, type: "turnover", x: pos[bHolder].x, y: pos[bHolder].y, team: passerTeam });
@@ -741,17 +744,15 @@ export class Engine {
     for (let st = 1; st <= SUBSTEPS; st++) {
       const t = st * dt;
 
-      /* --- coins --- */
       for (let gi = 0; gi < 10; gi++) {
         if (gi === frozenGi) { R.coinKeys[gi].push({ t, x: pos[gi].x, y: pos[gi].y }); continue; }
         if (t > MOVE_DUR) {
-          const damp = Math.pow(0.012, dt); // settle after the push
+          const damp = Math.pow(0.012, dt);
           vel[gi].x *= damp; vel[gi].y *= damp;
         }
         pos[gi].x += vel[gi].x * dt;
         pos[gi].y += vel[gi].y * dt;
       }
-      // pairwise collisions — momentum exchange, power = stretch speed
       for (let i = 0; i < 10; i++) {
         for (let j = i + 1; j < 10; j++) {
           const dx = pos[j].x - pos[i].x;
@@ -762,7 +763,7 @@ export class Engine {
             const nx = dx / d, ny = dy / d;
             const iFrozen = i === frozenGi, jFrozen = j === frozenGi;
             if (iFrozen || jFrozen) {
-              const push = minD - d; // the carrier is an immovable object
+              const push = minD - d;
               if (iFrozen) { pos[j].x += nx * push; pos[j].y += ny * push; }
               else { pos[i].x -= nx * push; pos[i].y -= ny * push; }
             } else {
@@ -779,7 +780,7 @@ export class Engine {
               const sameTeam = this.coins[i].team === this.coins[j].team;
               const e = sameTeam ? 0.45 : 0.92;
               if (iFrozen || jFrozen) {
-                const jm = (1 + e) * vn; // full rebound off the static carrier
+                const jm = (1 + e) * vn;
                 if (iFrozen) { vel[j].x += nx * jm; vel[j].y += ny * jm; }
                 else { vel[i].x -= nx * jm; vel[i].y -= ny * jm; }
               } else {
@@ -804,7 +805,6 @@ export class Engine {
           }
         }
       }
-      // outer movement circle (no reflection — the rim absorbs) + pitch walls
       for (let gi = 0; gi < 10; gi++) {
         if (gi === frozenGi) continue;
         const c = this.coins[gi];
@@ -815,7 +815,7 @@ export class Engine {
           pos[gi].x = c.ax + nx * c.orbit;
           pos[gi].y = c.ay + ny * c.orbit;
           const vn = vel[gi].x * nx + vel[gi].y * ny;
-          if (vn > 0) { vel[gi].x -= nx * vn; vel[gi].y -= ny * vn; } // slide along the rim
+          if (vn > 0) { vel[gi].x -= nx * vn; vel[gi].y -= ny * vn; }
         }
         const m = R_COIN;
         if (pos[gi].x < PITCH.l + m) { pos[gi].x = PITCH.l + m; vel[gi].x = Math.abs(vel[gi].x) * 0.5; }
@@ -825,7 +825,6 @@ export class Engine {
         if (st % 2 === 0) R.coinKeys[gi].push({ t, x: pos[gi].x, y: pos[gi].y });
       }
 
-      /* --- ball --- */
       if (bMode === "held" && bHolder != null) {
         const hc = this.coins[bHolder];
         const dir = hc.team === 0 ? 1 : -1;
@@ -834,7 +833,6 @@ export class Engine {
         if (!kicked && t >= kickAt) {
           kicked = true;
           if (!pass) {
-            // forced turnover: punt to the nearest rival
             let best = -1, bd = Infinity;
             for (let gi = 0; gi < 10; gi++) {
               if (this.coins[gi].team === passerTeam) continue;
@@ -863,14 +861,12 @@ export class Engine {
         }
         R.ballKeys.push({ t, x: bx, y: by });
       } else if (bMode === "flight" && pass && bFrom && bTo) {
-        // glide over the coins' travel window — lands the instant the receiver stops
         const span = Math.max(0.05, MOVE_DUR - bT0);
         let f = (t - bT0) / span;
         f = Math.min(1, Math.max(0, f));
         bx = bFrom.x + (bTo.x - bFrom.x) * f;
         by = bFrom.y + (bTo.y - bFrom.y) * f;
         const arrive = f >= 1;
-        // defenders on the lane cut the ball
         let cutBy = -1;
         for (let gi = 0; gi < 10; gi++) {
           if (this.coins[gi].team === passerTeam) continue;
@@ -902,7 +898,6 @@ export class Engine {
             R.events.push({ t, type: "catch", x: bx, y: by, team: this.coins[pass.receiverId].team });
             bMode = "held"; bHolder = pass.receiverId;
           } else {
-            // lead pass into space — closest coin claims it
             let best = -1, bd = Infinity;
             for (let gi = 0; gi < 10; gi++) {
               const d = Math.hypot(pos[gi].x - bx, pos[gi].y - by);
@@ -943,7 +938,6 @@ export class Engine {
           if (by < PITCH.t + R_BALL) { by = PITCH.t + R_BALL; bvy = Math.abs(bvy) * 0.6; }
           if (by > PITCH.b - R_BALL) { by = PITCH.b - R_BALL; bvy = -Math.abs(bvy) * 0.6; }
         }
-        // moving coins strike the loose ball (not after a goal is decided)
         if (!goal) {
           for (let gi = 0; gi < 10; gi++) {
             const spd = Math.hypot(vel[gi].x, vel[gi].y);
@@ -968,8 +962,6 @@ export class Engine {
       if (goal && st % 6 === 0) R.ballKeys.push({ t, x: bx, y: by });
     }
 
-    // RULE: teammates may crash freely, but at rest they must stay out of each
-    // other's inner keep-out circle (zone = half the movement circle).
     for (let it = 0; it < 12; it++) {
       let moved = false;
       for (let i = 0; i < 10; i++) {
@@ -1003,12 +995,10 @@ export class Engine {
       }
       if (!moved) break;
     }
-    // glide coins into their corrected resting spots during the playback tail
     for (let gi = 0; gi < 10; gi++) {
       R.coinKeys[gi].push({ t: PHYS_DUR + 0.22, x: pos[gi].x, y: pos[gi].y });
     }
 
-    // tail: settle the outcome into the playback window
     if (!goal) {
       if (bMode === "loose") {
         let best = -1, bd = Infinity;
@@ -1053,8 +1043,6 @@ export class Engine {
       for (let tt = PHYS_DUR + 0.2; tt <= RESOLVE_TOTAL; tt += 0.22) R.ballKeys.push({ t: tt, x: bx, y: by });
     }
 
-    // ONLINE host: compact the reel ONCE, then both devices play back the
-    // very same keys — zero sub-pixel drift between the two phones
     if (this.net.active && this.net.isHost) {
       const ck = R.coinKeys.map((k) => this.compactKeys(k));
       const bk = this.compactKeys(R.ballKeys);
@@ -1133,7 +1121,7 @@ export class Engine {
         sfx.drop();
         break;
       case "goal":
-        break; // handled at resolve end
+        break;
     }
   }
 
@@ -1143,7 +1131,6 @@ export class Engine {
       const arr = this.resolve.coinKeys[gi];
       const k = arr[arr.length - 1];
       c.x = k.x; c.y = k.y; c.vx = 0; c.vy = 0;
-      // the movement circle re-centers on where the coin now is
       c.ax = k.x; c.ay = k.y;
     });
     const bp = this.keyAt(this.resolve.ballKeys, RESOLVE_TOTAL);
@@ -1153,12 +1140,11 @@ export class Engine {
     if (res.ballMode === "held") this.syncBallToHolder();
     this.plans = [emptyPlan(), emptyPlan()];
 
-    // ONLINE guest: settle the reel, then wait for the host's next phase
     if (this.net.active && !this.net.isHost) {
       if (res.goal != null) {
         this.goalTeam = res.goal;
         this.mode = "goal";
-        this.modeUntil = this.time + 9999; // host sends the restart / champion message
+        this.modeUntil = this.time + 9999;
         this.bannerId++;
         sfx.horn(); sfx.cheer();
         this.shake = 14;
@@ -1213,7 +1199,6 @@ export class Engine {
       this.emit(true);
       return;
     }
-    // RULE: a goal restarts the 120s round clock
     this.tick = 0;
     this.plans = [emptyPlan(), emptyPlan()];
     this.placeFormations();
@@ -1223,7 +1208,6 @@ export class Engine {
     this.ball.holderId = holder;
     this.syncBallToHolder();
     if (this.net.active && this.net.isHost) {
-      // tell the guest to rebuild the identical kickoff layout before planning
       this.planner = 0;
       this.startPlan();
       this.net.send({
@@ -1242,7 +1226,6 @@ export class Engine {
     this.shake = Math.max(0, this.shake - dt * 26);
     this.coins.forEach((c) => (c.flash = Math.max(0, c.flash - dt * 2.4)));
 
-    // ONLINE: resolve the instant BOTH devices have locked in
     if (
       this.mode === "plan" && this.net.active && this.net.isHost &&
       this.net.hostLocked && this.net.guestPlanIn && this.net.oppLocked
@@ -1269,13 +1252,12 @@ export class Engine {
         } else this.uiConfirmForm();
       } else if (this.net.active) {
         if (this.net.isHost) {
-          // resolve once the guest's plan is in, or after a short grace past the deadline
           if (this.net.guestPlanIn || this.time >= this.modeUntil + 0.6) {
             this.net.guestPlanIn = false;
             this.net.oppLocked = false;
             this.startResolve();
           }
-        } else this.lockPlan(); // ships the guest's orders at the deadline
+        } else this.lockPlan();
       } else this.lockPlan();
     }
     if (this.mode === "roundIntro" && this.time >= this.modeUntil) this.nextSegment();
@@ -1288,7 +1270,6 @@ export class Engine {
           this.setupIdleField(0);
           this.net.send({ t: "phase", kind: "form", fresh: false, round: this.round + 1, deadline: Date.now() + FORM_TIME * 1000, scores: this.scores, forms: this.forms });
         }
-        // guest waits for the host's next phase message
         this.emit(true);
       } else {
         this.planner = 0;
@@ -1300,7 +1281,7 @@ export class Engine {
     }
     if (this.mode === "goal" && this.time >= this.modeUntil) {
       if (this.net.active && !this.net.isHost) {
-        // guest: the host decides when the restart / champion screen lands
+        // Guest waits for host
       } else this.goalDone();
     }
 
@@ -1323,7 +1304,6 @@ export class Engine {
     if (this.ball.mode === "held" && this.mode !== "resolve") this.syncBallToHolder();
     if (this.mode !== "resolve") this.ball.spin += dt * 0.6;
 
-    // particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
@@ -1375,8 +1355,6 @@ export class Engine {
     });
   }
 
-  /* ---------------- particles ---------------- */
-
   private addP(p: { x: number; y: number; kind: Particle["kind"]; color: string; life?: number; vx?: number; vy?: number; size?: number; label?: string }) {
     if (this.particles.length > 420) this.particles.shift();
     this.particles.push({
@@ -1398,15 +1376,13 @@ export class Engine {
     }
   }
 
-  /* ---------------- input ---------------- */
-
   private toLocal(e: PointerEvent): Vec {
     const r = this.cv.getBoundingClientRect();
     return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
   }
 
   private hitCoin(p: Vec, team: Team): number | null {
-    let best: number | null = null, bd = R_COIN + 26; // generous finger-sized hit area
+    let best: number | null = null, bd = R_COIN + 26;
     this.coins.forEach((c, gi) => {
       if (c.team !== team) return;
       const d = dist(p, c);
@@ -1432,10 +1408,8 @@ export class Engine {
   private onDown = (e: PointerEvent) => {
     if (e.button === 2) return;
     if (this.mode !== "plan") return;
-    // online guest: orders already shipped — the board is read-only until the clash
     if (this.net.active && !this.net.isHost && this.net.planSent) return;
     const p = this.toLocal(e);
-    // grab the ball itself to plan a pass
     if (
       this.ball.mode === "held" && this.ball.holderId != null &&
       this.coins[this.ball.holderId].team === this.planner &&
@@ -1449,8 +1423,6 @@ export class Engine {
     }
     const gi = this.hitCoin(p, this.planner);
     if (gi == null) return;
-    // the carrier is frozen in place, but it is selectable: dragging from the
-    // carrier coin plans the pass (exactly like dragging the ball itself)
     if (this.ball.mode === "held" && this.ball.holderId === gi) {
       this.drag = { kind: "pass", coinIdx: gi };
       this.dragAim = p;
@@ -1471,7 +1443,6 @@ export class Engine {
         this.coins[this.ball.holderId].team === this.planner &&
         dist(p, { x: this.ball.x, y: this.ball.y }) < R_BALL + 28;
       this.hoverCoin = this.hitCoin(p, this.planner);
-      // both the ball and the carrier coin are grabbable (they start a pass)
       this.cv.style.cursor = nearBall || this.hoverCoin != null ? "grab" : "default";
     }
     if (!this.drag || this.mode !== "plan") return;
@@ -1491,7 +1462,6 @@ export class Engine {
     }
   };
 
-  /** planned targets must rest outside every teammate's inner keep-out zone */
   private enforceSpacing(target: Vec, team: Team, idx: number): Vec {
     const me = this.coins[idx];
     let t = { ...target };
@@ -1537,7 +1507,7 @@ export class Engine {
   private commitPass(team: Team, holder: Coin, aim: Vec) {
     const plan = this.plans[team];
     if (dist(aim, holder) < 20) { plan.pass = null; sfx.drop(); return; }
-    let mate = -1, bd = R_COIN + 34; // roomy snap radius for touch
+    let mate = -1, bd = R_COIN + 34;
     this.coins.forEach((c2, gi) => {
       if (c2.team !== team || c2 === holder) return;
       const d = dist(aim, c2);
@@ -1556,13 +1526,10 @@ export class Engine {
     }
   }
 
-  /* ---------------- stadium background ---------------- */
-
   private buildStadium() {
     const cv = document.createElement("canvas");
     cv.width = W; cv.height = H;
     const c = cv.getContext("2d")!;
-    // stands
     c.fillStyle = "#07131d";
     c.fillRect(0, 0, W, H);
     const crowd = c.createLinearGradient(0, 0, 0, H);
@@ -1580,7 +1547,6 @@ export class Engine {
     }
     c.globalAlpha = 1;
 
-    // pitch surround + stripes
     c.fillStyle = "#0b3d28";
     c.fillRect(PITCH.l - 26, PITCH.t - 24, PITCH.r - PITCH.l + 52, PITCH.b - PITCH.t + 48);
     const stripeW = (PITCH.r - PITCH.l) / 12;
@@ -1589,7 +1555,6 @@ export class Engine {
       c.fillRect(PITCH.l + i * stripeW, PITCH.t, stripeW, PITCH.b - PITCH.t);
     }
 
-    // chalk
     c.strokeStyle = "rgba(240,250,244,0.85)";
     c.lineWidth = 2.5;
     c.strokeRect(PITCH.l, PITCH.t, PITCH.r - PITCH.l, PITCH.b - PITCH.t);
@@ -1614,7 +1579,6 @@ export class Engine {
     };
     box(true); box(false);
 
-    // goals + nets
     const goal = (left: boolean) => {
       const gx = left ? PITCH.l : PITCH.r;
       const d = left ? -GOAL.depth : GOAL.depth;
@@ -1644,7 +1608,6 @@ export class Engine {
     };
     goal(true); goal(false);
 
-    // ad boards
     c.font = "bold 15px 'Chakra Petch', sans-serif";
     c.textAlign = "center";
     const ads = ["KICKOFF TACTICS", "COIN LEAGUE", "FIRST TO TWO", "12 × 10 SECONDS", "NO STICKS · ALL COINS"];
@@ -1660,7 +1623,6 @@ export class Engine {
     });
     c.globalAlpha = 1;
 
-    // floodlights
     const light = (x: number, y: number) => {
       const g = c.createRadialGradient(x, y, 4, x, y, 240);
       g.addColorStop(0, "rgba(255,250,220,0.5)");
@@ -1673,7 +1635,6 @@ export class Engine {
     };
     light(60, 12); light(W - 60, 12); light(60, H - 12); light(W - 60, H - 12);
 
-    // vignette
     const v = c.createRadialGradient(PITCH_CX, PITCH_CY, 300, PITCH_CX, PITCH_CY, 820);
     v.addColorStop(0, "rgba(0,0,0,0)");
     v.addColorStop(1, "rgba(0,4,10,0.55)");
@@ -1682,8 +1643,6 @@ export class Engine {
 
     this.bg = cv;
   }
-
-  /* ---------------- draw ---------------- */
 
   private draw() {
     const c = this.ctx;
@@ -1695,7 +1654,6 @@ export class Engine {
     if (!this.bg) this.buildStadium();
     if (this.bg) c.drawImage(this.bg, 0, 0, W, H);
 
-    // crowd camera flashes
     if (Math.random() < 0.03) {
       const x = Math.random() < 0.5 ? Math.random() * (PITCH.l - 30) : PITCH.r + 30 + Math.random() * (W - PITCH.r - 30);
       this.addP({ x, y: Math.random() * H, kind: "flash", color: "#fffbe6", life: 0.18, size: 2 + Math.random() * 3 });
@@ -1714,7 +1672,6 @@ export class Engine {
     if (this.mode !== "plan" && this.mode !== "resolve") return;
 
     if (this.mode === "resolve") {
-      // faint live keep-out rings for both teams
       c.save();
       for (let gi = 0; gi < 10; gi++) {
         const cn = this.coins[gi];
@@ -1738,7 +1695,6 @@ export class Engine {
     this.coins.forEach((cn, gi) => {
       if (cn.team !== team) return;
 
-      // inner keep-out zone sits at the coin's projected resting spot
       const mv = plan.moves[cn.idx];
       const rp = mv ?? { x: cn.x, y: cn.y };
       let violated = false;
@@ -1768,7 +1724,6 @@ export class Engine {
 
       const active = this.drag?.kind === "move" && this.drag.coinIdx === gi;
       const hov = this.hoverCoin === gi;
-      // outer movement circle
       c.globalAlpha = active ? 0.55 : hov ? 0.34 : 0.15;
       c.strokeStyle = col;
       c.setLineDash([4, 8]);
@@ -1811,7 +1766,7 @@ export class Engine {
         c.strokeStyle = col;
         c.globalAlpha = active ? 0.95 : 0.6;
         c.setLineDash([7, 7]);
-        c.lineWidth = 2 + 3.2 * power; // thicker = more power
+        c.lineWidth = 2 + 3.2 * power;
         c.beginPath(); c.moveTo(cn.x, cn.y); c.lineTo(mv.x, mv.y); c.stroke();
         c.setLineDash([]);
         const a = Math.atan2(mv.y - cn.y, mv.x - cn.x);
@@ -1841,7 +1796,6 @@ export class Engine {
       }
     });
 
-    // pass plan / live aim
     if (this.ball.mode === "held" && this.ball.holderId != null && this.teamOf(this.ball.holderId) === team) {
       const holder = this.coins[this.ball.holderId];
       const aiming = this.drag?.kind === "pass" && this.dragAim;
@@ -1904,7 +1858,6 @@ export class Engine {
         }
         c.restore();
       } else if (!aiming) {
-        // pulsing hint: grab the ball to pass
         const pulse = 0.5 + 0.5 * Math.sin(this.time * 5);
         c.save();
         c.strokeStyle = "#ffd23f";
@@ -1928,13 +1881,11 @@ export class Engine {
       const isHolder = this.ball.mode === "held" && this.ball.holderId === gi;
 
       c.save();
-      // shadow
       c.globalAlpha = 0.35;
       c.fillStyle = "#000";
       c.beginPath(); c.ellipse(x + 3, y + 6, R_COIN * 0.95, R_COIN * 0.5, 0, 0, 7); c.fill();
       c.globalAlpha = 1;
 
-      // metallic body
       const g = c.createRadialGradient(x - 7, y - 8, 4, x, y, R_COIN + 4);
       g.addColorStop(0, "#ffffff");
       g.addColorStop(0.35, col);
@@ -1942,7 +1893,6 @@ export class Engine {
       c.fillStyle = g;
       c.beginPath(); c.arc(x, y, R_COIN, 0, 7); c.fill();
 
-      // face emblem (scaled to fill the coin face)
       const faceD = Math.round((R_COIN - 4) * 2);
       const em = makeEmblem(this.flags[cn.team], faceD, "rgba(0,0,0,0.35)");
       c.save();
@@ -1950,12 +1900,10 @@ export class Engine {
       c.drawImage(em, x - faceD / 2, y - faceD / 2, faceD, faceD);
       c.restore();
 
-      // rim
       c.lineWidth = 3;
       c.strokeStyle = col;
       c.beginPath(); c.arc(x, y, R_COIN - 1.5, 0, 7); c.stroke();
 
-      // holder gold ring + pulse
       if (isHolder && this.mode !== "resolve") {
         const pulse = 0.5 + 0.5 * Math.sin(this.time * 6);
         c.strokeStyle = "#ffd23f";
@@ -1964,7 +1912,6 @@ export class Engine {
         c.beginPath(); c.arc(x, y, R_COIN + 5 + pulse * 2, 0, 7); c.stroke();
       }
 
-      // flash on clash
       if (cn.flash > 0) {
         c.globalAlpha = cn.flash * 0.8;
         c.strokeStyle = "#fff";
@@ -2005,7 +1952,7 @@ export class Engine {
     c.rotate(spin);
     c.fillStyle = "#f4f6f5";
     c.beginPath(); c.arc(0, 0, R_BALL, 0, 7); c.fill();
-    const bk = R_BALL / 11; // pattern scale (tuned for an 11px ball)
+    const bk = R_BALL / 11;
     c.fillStyle = "#17181c";
     c.beginPath();
     for (let i = 0; i < 5; i++) {
