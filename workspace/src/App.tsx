@@ -457,52 +457,63 @@ export default function App() {
           </div>
         )}
 
-        {/* planning panel — docks to the right edge on phones, bottom-center on desktop */}
+        {/* ======= PLANNING PANEL ======= */}
         {ui.mode === "plan" && (
           <div
-            className="absolute z-20 flex flex-col items-stretch gap-2 w-[112px] right-1.5 top-1/2 -translate-y-1/2
-              md:w-auto md:right-auto md:top-auto md:bottom-3 md:left-1/2 md:-translate-x-1/2 md:translate-y-0
-              md:flex-row md:items-center md:gap-4 md:px-2"
+            className="absolute z-20 flex flex-col items-center gap-2"
+            style={{
+              bottom: "12px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "auto",
+            }}
           >
-            <div className="panel chamfer px-2 py-1.5 text-center md:text-left md:px-4 md:py-2">
-              <div className="font-disp text-[11px] leading-tight md:text-sm" style={{ color: pcol }}>
-                {ui.online ? `ORDERS · P${(ui.myTeam ?? 0) + 1}` : `P${ui.planner + 1} SECRET ORDERS`}
+            {/* Timer at top of panel */}
+            <div className="panel chamfer px-4 py-2 flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="font-disp text-[11px] md:text-sm" style={{ color: pcol }}>
+                  {ui.online ? `ORDERS · P${(ui.myTeam ?? 0) + 1}` : `P${ui.planner + 1} SECRET ORDERS`}
+                </div>
+                <div className="text-[8px] md:text-[10px] tracking-wider md:tracking-[0.2em] text-white/50 font-bold">
+                  SEG {Math.min(ui.tick + 1, TICKS_PER_ROUND)}/{TICKS_PER_ROUND}
+                </div>
+                {ui.online && ui.oppLocked && (
+                  <div className="text-[8px] md:text-[10px] font-bold text-[#3fd46d]">RIVAL LOCKED ✓</div>
+                )}
+                {ui.online && ui.awaiting && (
+                  <div className="text-[8px] md:text-[10px] font-bold text-[#ffd23f] flight-flash">SENT — SYNCING…</div>
+                )}
               </div>
-              <div className="text-[8px] md:text-[10px] tracking-wider md:tracking-[0.2em] text-white/50 font-bold mt-0.5">
-                SEG {Math.min(ui.tick + 1, TICKS_PER_ROUND)}/{TICKS_PER_ROUND}
-              </div>
-              {ui.online && ui.oppLocked && (
-                <div className="text-[8px] md:text-[10px] font-bold text-[#3fd46d] mt-0.5">RIVAL LOCKED ✓</div>
-              )}
-              {ui.online && ui.awaiting && (
-                <div className="text-[8px] md:text-[10px] font-bold text-[#ffd23f] flight-flash mt-0.5">SENT — SYNCING…</div>
-              )}
+              <TimerRing left={ui.planLeft} total={ui.planTotal} size={52} />
             </div>
-            {ui.online && (ui.awaiting || ui.lockedIn) ? (
-              <div className="flex flex-col items-center justify-center px-2 py-2 md:px-4 panel chamfer-sm">
-                <span className="font-disp text-lg text-[#ffd23f] flight-flash">● ● ●</span>
-                <span className="text-[8px] md:text-[9px] tracking-[0.12em] md:tracking-[0.16em] text-white/55 font-bold text-center">
-                  {ui.oppLocked
-                    ? "CLASHING…"
-                    : ui.myTeam === 1
-                      ? "WAITING FOR CLASH"
-                      : "RIVAL IS PLANNING"}
-                </span>
-              </div>
-            ) : (
-              <div className="self-center md:self-auto">
-                <TimerRing left={ui.planLeft} total={ui.planTotal} size={70} />
-              </div>
-            )}
-            <div className="flex flex-col gap-1.5">
-              <button onClick={() => eng().uiLock()} disabled={ui.awaiting}
-                className="btn-blade font-disp text-sm md:text-base px-3 py-2 md:px-7 text-[#04121c] disabled:opacity-40" style={{ background: "#ffd23f" }}>
-                {ui.awaiting ? "SENT ✓" : "LOCK IN ▸"}
-              </button>
-              <button onClick={() => eng().uiClearPlan()} disabled={ui.awaiting}
-                className="btn-blade font-disp text-[11px] px-3 py-1.5 md:px-7 text-white/75 bg-[#12384c] disabled:opacity-40">
-                CLEAR
-              </button>
+
+            {/* Buttons below timer */}
+            <div className="flex items-center gap-2">
+              {ui.online && (ui.awaiting || ui.lockedIn) ? (
+                <div className="panel chamfer-sm px-4 py-2">
+                  <span className="font-disp text-sm text-[#ffd23f] flight-flash">
+                    {ui.oppLocked ? "CLASHING…" : "WAITING FOR RIVAL…"}
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => eng().uiLock()}
+                    disabled={ui.awaiting}
+                    className="btn-blade font-disp text-sm md:text-base px-4 py-2 md:px-6 text-[#04121c] disabled:opacity-40"
+                    style={{ background: "#ffd23f" }}
+                  >
+                    {ui.awaiting ? "SENT ✓" : "LOCK IN ▸"}
+                  </button>
+                  <button
+                    onClick={() => eng().uiClearPlan()}
+                    disabled={ui.awaiting}
+                    className="btn-blade font-disp text-sm px-4 py-2 text-white/75 bg-[#12384c] disabled:opacity-40"
+                  >
+                    CLEAR
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
