@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Bungee", "Rubik", sans-serif;
+  --font-body: "Rubik", sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #04150d;
+  color: #eaffdf;
+  font-family: var(--font-body);
+  overflow: hidden;
+}
+
+::selection {
+  background: #ffc400;
+  color: #04150d;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Buttons: varsity plates, skewed with hard shadows ─────────────── */
+.btn {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  transform: skewX(-6deg);
+  border: 3px solid #04150d;
+  box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.55);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  cursor: pointer;
+  line-height: 1;
+}
+.btn > svg {
+  transform: skewX(6deg);
+}
+.btn:hover {
+  transform: skewX(-6deg) translate(-2px, -2px);
+  box-shadow: 7px 7px 0 rgba(0, 0, 0, 0.55);
+  filter: brightness(1.07);
+}
+.btn:active {
+  transform: skewX(-6deg) translate(3px, 3px);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.55);
+}
+.btn-gold {
+  background: #ffc400;
+  color: #1a1200;
+}
+.btn-line {
+  background: #06251a;
+  color: #cfe9d8;
+  border-color: #1c5c40;
+}
+.btn-line:hover {
+  border-color: #ffc400;
+  color: #ffc400;
+}
+.btn-net {
+  background: #032a30;
+  color: #00e0ff;
+  border-color: #00e0ff;
+  box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.55), 0 0 18px rgba(0, 224, 255, 0.25);
+}
+.btn-net:hover {
+  filter: brightness(1.25);
+}
+
+@keyframes spinSlow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin-slow {
+  animation: spinSlow 1.1s linear infinite;
+}
+
+@keyframes codePop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.code-pop {
+  animation: codePop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 10px currentColor;
+  }
+  50% {
+    opacity: 0.45;
+    box-shadow: 0 0 2px currentColor;
+  }
+}
+.pulse-dot {
+  animation: pulseDot 1.4s ease-in-out infinite;
+}
+
+/* ── Motion ────────────────────────────────────────────────────────── */
+@keyframes bannerPop {
+  0% { opacity: 0; transform: scale(0.5) skewX(-6deg); }
+  12% { opacity: 1; transform: scale(1.07) skewX(-6deg); }
+  22% { transform: scale(1) skewX(-6deg); }
+  78% { opacity: 1; transform: scale(1) skewX(-6deg); }
+  100% { opacity: 0; transform: scale(0.96) skewX(-6deg) translateY(-14px); }
+}
+.banner-anim {
+  animation: bannerPop 1.7s cubic-bezier(0.2, 1.2, 0.3, 1) forwards;
+}
+
+@keyframes tickerScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ticker-track {
+  animation: tickerScroll 22s linear infinite;
+  width: max-content;
+}
+
+@keyframes stripePan {
+  from { background-position: 0 0; }
+  to { background-position: 0 160px; }
+}
+.title-stripes {
+  background: repeating-linear-gradient(0deg, #0b6a31 0 40px, #0a5f2c 40px 80px);
+  animation: stripePan 7s linear infinite;
+}
+
+@keyframes eqPulse {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.eq-bar {
+  display: inline-block;
+  transform-origin: bottom;
+  animation: eqPulse 0.7s ease-in-out infinite;
+}
+
+@keyframes ballBounce {
+  0%, 100% { transform: translateY(-16px) rotate(-24deg); }
+  50% { transform: translateY(16px) rotate(210deg); }
+}
+.ball-bounce { animation: ballBounce 1.7s ease-in-out infinite; }
+.ball-bounce2 { animation: ballBounce 1.7s ease-in-out infinite; animation-delay: -0.85s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .title-stripes,
+  .ticker-track,
+  .ball-bounce,
+  .ball-bounce2,
+  .eq-bar {
+    animation: none;
+  }
+}
