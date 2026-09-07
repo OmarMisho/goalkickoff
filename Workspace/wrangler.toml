@@ -1,0 +1,10 @@
+name = "turf-clash"
+compatibility_date = "2026-01-01"
+
+[pages]
+  # Name of the Cloudflare Pages project (set via dashboard too).
+  project_name = "turf-clash"
+
+[build]
+  command = "npm run build"
+  output_dir = "dist"
